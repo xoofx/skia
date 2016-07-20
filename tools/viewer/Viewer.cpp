@@ -20,6 +20,7 @@
 #include "SkRandom.h"
 #include "SkStream.h"
 #include "SkSurface.h"
+#include "SkTime.h"
 
 using namespace sk_app;
 
@@ -86,10 +87,12 @@ const char* kFpsStateName = "FPS";
 const char* kSplitScreenStateName = "Split screen";
 const char* kON = "ON";
 const char* kOFF = "OFF";
+const char* kRefreshStateName = "Refresh";
 
 Viewer::Viewer(int argc, char** argv, void* platformData)
     : fCurrentMeasurement(0)
     , fDisplayStats(false)
+    , fRefresh(false)
     , fSplitScreen(false)
     , fBackendType(sk_app::Window::kNativeGL_BackendType)
     , fZoomCenterX(0.0f)
@@ -215,7 +218,9 @@ void Viewer::initSlides() {
     const SkViewRegister* reg = SkViewRegister::Head();
     while (reg) {
         sk_sp<Slide> slide(new SampleSlide(reg->factory()));
-        fSlides.push_back(slide);
+        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
+            fSlides.push_back(slide);
+        }
         reg = reg->next();
     }
 
@@ -253,6 +258,10 @@ void Viewer::initSlides() {
         SkOSFile::Iter it(FLAGS_jpgs[i], ".jpg");
         SkString jpgName;
         while (it.next(&jpgName)) {
+            if (SkCommandLineFlags::ShouldSkip(FLAGS_match, jpgName.c_str())) {
+                continue;
+            }
+
             SkString path = SkOSPath::Join(FLAGS_jpgs[i], jpgName.c_str());
             sk_sp<ImageSlide> slide(new ImageSlide(jpgName, path));
             if (slide) {
@@ -400,6 +409,9 @@ void Viewer::drawSlide(SkCanvas* canvas, bool inSplitScreen) {
 }
 
 void Viewer::onPaint(SkCanvas* canvas) {
+    // Record measurements
+    double startTime = SkTime::GetMSecs();
+
     drawSlide(canvas, false);
     if (fSplitScreen && fWindow->supportsContentRect()) {
         drawSlide(canvas, true);
@@ -409,6 +421,11 @@ void Viewer::onPaint(SkCanvas* canvas) {
         drawStats(canvas);
     }
     fCommands.drawHelp(canvas);
+
+    fMeasurements[fCurrentMeasurement++] = SkTime::GetMSecs() - startTime;
+    fCurrentMeasurement &= (kMeasurementCount - 1);  // fast mod
+    SkASSERT(fCurrentMeasurement < kMeasurementCount);
+    updateUIState(); // Update the FPS
 }
 
 bool Viewer::onTouch(intptr_t owner, Window::InputState state, float x, float y) {
@@ -480,16 +497,10 @@ void Viewer::drawStats(SkCanvas* canvas) {
     canvas->restore();
 }
 
-void Viewer::onIdle(double ms) {
-    // Record measurements
-    fMeasurements[fCurrentMeasurement++] = ms;
-    fCurrentMeasurement &= (kMeasurementCount - 1);  // fast mod
-    SkASSERT(fCurrentMeasurement < kMeasurementCount);
-
+void Viewer::onIdle() {
     fAnimTimer.updateTime();
-    if (fSlides[fCurrentSlide]->animate(fAnimTimer) || fDisplayStats) {
+    if (fSlides[fCurrentSlide]->animate(fAnimTimer) || fDisplayStats || fRefresh) {
         fWindow->inval();
-        updateUIState(); // Update the FPS
     }
 }
 
@@ -596,6 +607,10 @@ void Viewer::onUIStateChanged(const SkString& stateName, const SkString& stateVa
             fWindow->inval();
             updateUIState();
         }
+    } else if (stateName.equals(kRefreshStateName)) {
+        // This state is actually NOT in the UI state.
+        // We use this to allow Android to quickly set bool fRefresh.
+        fRefresh = stateValue.equals(kON);
     } else {
         SkDebugf("Unknown stateName: %s", stateName.c_str());
     }

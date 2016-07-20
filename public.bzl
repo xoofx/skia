@@ -114,7 +114,8 @@ BASE_SRCS_ALL = struct(
 
         # Exclude files that don't compile with the current DEFINES.
         "src/gpu/gl/mesa/*",  # Requires SK_MESA define.
-        "src/svg/parser/*",  # Missing SkSVG.h.
+        "src/svg/**/*",  # Depends on XML.
+        "src/xml/**/*",
 
         # Conflicting dependencies among Lua versions. See cl/107087297.
         "src/utils/SkLua*",
@@ -122,12 +123,10 @@ BASE_SRCS_ALL = struct(
         # Not used.
         "src/animator/**/*",
         "src/views/**/*",
-        "src/xml/SkBML_Verbs.h",
-        "src/xml/SkBML_XMLParser.cpp",
-        "src/xml/SkXMLPullParser.cpp",
 
         # Currently exclude all vulkan specific files
         "src/gpu/vk/*",
+        "src/sksl/**/*",
     ],
 )
 
@@ -325,8 +324,6 @@ BASE_HDRS = struct(
         # Not used.
         "include/animator/**/*",
         "include/views/**/*",
-        "include/xml/SkBML_WXMLParser.h",
-        "include/xml/SkBML_XMLParser.h",
     ],
 )
 
@@ -423,6 +420,8 @@ DM_SRCS_ALL = struct(
         "tests/PathOpsSkpClipTest.cpp",  # Alternate main.
         "tests/skia_test.cpp",  # Old main.
         "tests/SkpSkGrTest.cpp",  # Alternate main.
+        "tests/SkSLErrorTest.cpp",  # Excluded along with Vulkan.
+        "tests/SVGDeviceTest.cpp",
         "tools/gpu/gl/angle/*",
         "tools/gpu/gl/command_buffer/*",
         "tools/gpu/gl/egl/*",
@@ -514,6 +513,7 @@ def DM_ARGS(base_dir, asan):
         "~Matrix",
         "~PathOpsCubic",
         "~PathOpsFailOp",
+        "~PathOpsOpCubicsThreaded",
         "~PathOpsOpLoopsThreaded",
         "~PathOpsSimplify",
         "~PathOpsTightBoundsQuads",
@@ -557,6 +557,9 @@ DEFINES_UNIX = [
     "SK_HAS_JPEG_LIBRARY",
     "SK_HAS_PNG_LIBRARY",
     "SK_HAS_WEBP_LIBRARY",
+    "TURBO_HAS_CROP",
+    "TURBO_HAS_SKIP",
+    "TURBO_HAS_565",
 ]
 
 DEFINES_ANDROID = [
@@ -566,6 +569,9 @@ DEFINES_ANDROID = [
     "SK_HAS_JPEG_LIBRARY",
     "SK_HAS_PNG_LIBRARY",
     "SK_HAS_WEBP_LIBRARY",
+    "TURBO_HAS_CROP",
+    "TURBO_HAS_SKIP",
+    "TURBO_HAS_565",
 ]
 
 DEFINES_IOS = [

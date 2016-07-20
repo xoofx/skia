@@ -221,6 +221,13 @@ void SkBaseDevice::drawAtlas(const SkDraw& draw, const SkImage* atlas, const SkR
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+void SkBaseDevice::drawSpecial(const SkDraw&, SkSpecialImage*, int x, int y, const SkPaint&) {}
+sk_sp<SkSpecialImage> SkBaseDevice::makeSpecial(const SkBitmap&) { return nullptr; }
+sk_sp<SkSpecialImage> SkBaseDevice::makeSpecial(const SkImage*) { return nullptr; }
+sk_sp<SkSpecialImage> SkBaseDevice::snapSpecial() { return nullptr; }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool SkBaseDevice::readPixels(const SkImageInfo& info, void* dstP, size_t rowBytes, int x, int y) {
 #ifdef SK_DEBUG
     SkASSERT(info.width() > 0 && info.height() > 0);
@@ -255,12 +262,6 @@ bool SkBaseDevice::onWritePixels(const SkImageInfo&, const void*, size_t, int, i
 }
 
 bool SkBaseDevice::onReadPixels(const SkImageInfo&, void*, size_t, int x, int y) {
-    return false;
-}
-
-bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
-                                            const SkPaint*) {
-    // The base class doesn't perform any accelerated picture rendering
     return false;
 }
 
@@ -400,6 +401,47 @@ void SkBaseDevice::drawTextOnPath(const SkDraw& draw, const void* text, size_t b
             morphpath(&tmp, *iterPath, meas, m);
             this->drawPath(draw, tmp, iter.getPaint(), nullptr, true);
         }
+    }
+}
+
+#include "SkUtils.h"
+typedef int (*CountTextProc)(const char* text);
+static int count_utf16(const char* text) {
+    const uint16_t* prev = (uint16_t*)text;
+    (void)SkUTF16_NextUnichar(&prev);
+    return SkToInt((const char*)prev - text);
+}
+static int return_4(const char* text) { return 4; }
+static int return_2(const char* text) { return 2; }
+
+void SkBaseDevice::drawTextRSXform(const SkDraw& draw, const void* text, size_t len,
+                                   const SkRSXform xform[], const SkPaint& paint) {
+    CountTextProc proc = nullptr;
+    switch (paint.getTextEncoding()) {
+        case SkPaint::kUTF8_TextEncoding:
+            proc = SkUTF8_CountUTF8Bytes;
+            break;
+        case SkPaint::kUTF16_TextEncoding:
+            proc = count_utf16;
+            break;
+        case SkPaint::kUTF32_TextEncoding:
+            proc = return_4;
+            break;
+        case SkPaint::kGlyphID_TextEncoding:
+            proc = return_2;
+            break;
+    }
+
+    SkDraw localD(draw);
+    SkMatrix localM, currM;
+    const void* stopText = (const char*)text + len;
+    while ((const char*)text < (const char*)stopText) {
+        localM.setRSXform(*xform++);
+        currM.setConcat(*draw.fMatrix, localM);
+        localD.fMatrix = &currM;
+        int subLen = proc((const char*)text);
+        this->drawText(localD, text, subLen, 0, 0, paint);
+        text = (const char*)text + subLen;
     }
 }
 

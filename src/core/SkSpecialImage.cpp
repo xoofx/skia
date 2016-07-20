@@ -335,19 +335,6 @@ public:
         }
     }
 
-    SkSpecialImage_Raster(const SkIRect& subset,
-                          const SkPixmap& pixmap,
-                          RasterReleaseProc releaseProc,
-                          ReleaseContext context,
-                          const SkSurfaceProps* props)
-        : INHERITED(subset, kNeedNewImageUniqueID_SpecialImage, props) {
-        fBitmap.installPixels(pixmap.info(), pixmap.writable_addr(),
-                              pixmap.rowBytes(), pixmap.ctable(),
-                              releaseProc, context);
-    }
-
-    ~SkSpecialImage_Raster() override { }
-
     bool isOpaque() const override { return fBitmap.isOpaque(); }
 
     size_t getSize() const override { return fBitmap.getSize(); }
@@ -428,19 +415,6 @@ sk_sp<SkSpecialImage> SkSpecialImage::MakeFromRaster(const SkIRect& subset,
     return sk_make_sp<SkSpecialImage_Raster>(subset, bm, props);
 }
 
-sk_sp<SkSpecialImage> SkSpecialImage::MakeFromPixmap(const SkIRect& subset,
-                                                     const SkPixmap& src,
-                                                     RasterReleaseProc releaseProc,
-                                                     ReleaseContext context,
-                                                     const SkSurfaceProps* props) {
-    if (!src.addr()) {
-        return nullptr;
-    }
-
-    return sk_make_sp<SkSpecialImage_Raster>(subset, src, releaseProc, context, props);
-}
-
-
 #if SK_SUPPORT_GPU
 ///////////////////////////////////////////////////////////////////////////////
 #include "GrTexture.h"
@@ -473,12 +447,11 @@ public:
         SkRect dst = SkRect::MakeXYWH(x, y,
                                       this->subset().width(), this->subset().height());
 
-        SkBitmap bm;
+        auto img = sk_sp<SkImage>(new SkImage_Gpu(fTexture->width(), fTexture->height(),
+                                                  this->uniqueID(), fAlphaType, fTexture.get(),
+                                                  SkBudgeted::kNo));
 
-        GrWrapTextureInBitmap(fTexture.get(),
-                              fTexture->width(), fTexture->height(), this->isOpaque(), &bm);
-
-        canvas->drawBitmapRect(bm, this->subset(),
+        canvas->drawImageRect(img, this->subset(),
                                dst, paint, SkCanvas::kStrict_SrcRectConstraint);
     }
 

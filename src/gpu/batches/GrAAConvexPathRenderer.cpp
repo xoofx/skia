@@ -746,9 +746,8 @@ public:
     AAConvexPathBatch(GrColor color, const SkMatrix& viewMatrix, const SkPath& path)
         : INHERITED(ClassID()) {
         fGeoData.emplace_back(Geometry{color, viewMatrix, path});
-        // compute bounds
-        fBounds = path.getBounds();
-        viewMatrix.mapRect(&fBounds);
+        this->setTransformedBounds(path.getBounds(), viewMatrix, HasAABloat::kYes,
+                                   IsZeroArea::kNo);
     }
 
     const char* name() const override { return "AAConvexBatch"; }
@@ -958,7 +957,7 @@ private:
         }
 
         fGeoData.push_back_n(that->fGeoData.count(), that->fGeoData.begin());
-        this->joinBounds(that->bounds());
+        this->joinBounds(*that);
         return true;
     }
 
@@ -999,7 +998,8 @@ bool GrAAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkPath path;
     args.fShape->asPath(&path);
 
-    SkAutoTUnref<GrDrawBatch> batch(new AAConvexPathBatch(args.fColor, *args.fViewMatrix, path));
+    SkAutoTUnref<GrDrawBatch> batch(new AAConvexPathBatch(args.fPaint->getColor(),
+                                                          *args.fViewMatrix, path));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint);
     pipelineBuilder.setUserStencil(args.fUserStencilSettings);

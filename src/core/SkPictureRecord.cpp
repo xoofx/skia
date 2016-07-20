@@ -218,6 +218,16 @@ void SkPictureRecord::didSetMatrix(const SkMatrix& matrix) {
     this->INHERITED::didSetMatrix(matrix);
 }
 
+void SkPictureRecord::didTranslateZ(SkScalar z) {
+    this->validate(fWriter.bytesWritten(), 0);
+    // op + scalar
+    size_t size = 1 * kUInt32Size + 1 * sizeof(SkScalar);
+    size_t initialOffset = this->addDraw(TRANSLATE_Z, &size);
+    this->addScalar(z);
+    this->validate(initialOffset, size);
+    this->INHERITED::didTranslateZ(z);
+}
+
 static bool regionOpExpands(SkRegion::Op op) {
     switch (op) {
         case SkRegion::kUnion_Op:
@@ -600,6 +610,30 @@ void SkPictureRecord::onDrawTextOnPath(const void* text, size_t byteLength, cons
     this->addText(text, byteLength);
     this->addPath(path);
     this->addMatrix(m);
+    this->validate(initialOffset, size);
+}
+
+void SkPictureRecord::onDrawTextRSXform(const void* text, size_t byteLength,
+                                        const SkRSXform xform[], const SkRect* cull,
+                                        const SkPaint& paint) {
+    const int count = paint.countText(text, byteLength);
+    // [op + paint-index + count + flags + length] + [text] + [xform] + cull
+    size_t size = 5 * kUInt32Size + SkAlign4(byteLength) + count * sizeof(SkRSXform);
+    uint32_t flags = 0;
+    if (cull) {
+        flags |= DRAW_TEXT_RSXFORM_HAS_CULL;
+        size += sizeof(SkRect);
+    }
+
+    size_t initialOffset = this->addDraw(DRAW_TEXT_RSXFORM, &size);
+    this->addPaint(paint);
+    this->addInt(count);
+    this->addInt(flags);
+    this->addText(text, byteLength);
+    fWriter.write(xform, count * sizeof(SkRSXform));
+    if (cull) {
+        fWriter.write(cull, sizeof(SkRect));
+    }
     this->validate(initialOffset, size);
 }
 

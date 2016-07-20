@@ -644,6 +644,11 @@ void SkDebugCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const 
         new SkDrawTextOnPathCommand(text, byteLength, path, matrix, paint));
 }
 
+void SkDebugCanvas::onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform xform[],
+                                      const SkRect* cull, const SkPaint& paint) {
+    this->addDrawCommand(new SkDrawTextRSXformCommand(text, byteLength, xform, cull, paint));
+}
+
 void SkDebugCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                    const SkPaint& paint) {
     this->addDrawCommand(new SkDrawTextBlobCommand(blob, x, y, paint));
@@ -683,6 +688,11 @@ SkCanvas::SaveLayerStrategy SkDebugCanvas::getSaveLayerStrategy(const SaveLayerR
 void SkDebugCanvas::didSetMatrix(const SkMatrix& matrix) {
     this->addDrawCommand(new SkSetMatrixCommand(matrix));
     this->INHERITED::didSetMatrix(matrix);
+}
+
+void SkDebugCanvas::didTranslateZ(SkScalar z) {
+    this->addDrawCommand(new SkTranslateZCommand(z));
+    this->INHERITED::didTranslateZ(z);
 }
 
 void SkDebugCanvas::toggleCommand(int index, bool toggle) {

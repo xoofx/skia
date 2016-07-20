@@ -225,7 +225,7 @@ public:
 #endif
     };
 
-    ColorCodecSrc(Path, Mode);
+    ColorCodecSrc(Path, Mode, SkColorType);
 
     Error draw(SkCanvas*) const override;
     SkISize size() const override;
@@ -234,6 +234,7 @@ public:
 private:
     Path                    fPath;
     Mode                    fMode;
+    SkColorType             fColorType;
 };
 
 class SKPSrc : public Src {
@@ -388,6 +389,12 @@ public:
 class ViaPicture : public Via {
 public:
     explicit ViaPicture(Sink* sink) : Via(sink) {}
+    Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
+};
+
+class ViaDefer : public Via {
+public:
+    explicit ViaDefer(Sink* sink) : Via(sink) {}
     Error draw(const Src&, SkBitmap*, SkWStream*, SkString*) const override;
 };
 

@@ -740,17 +740,22 @@ static bool gather_srcs() {
     }
 
     for (auto colorImage : colorImages) {
-        ColorCodecSrc* src = new ColorCodecSrc(colorImage, ColorCodecSrc::kBaseline_Mode);
+        ColorCodecSrc* src = new ColorCodecSrc(colorImage, ColorCodecSrc::kBaseline_Mode,
+                                               kN32_SkColorType);
         push_src("image", "color_codec_baseline", src);
 
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_HPZR30w_Mode);
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_HPZR30w_Mode, kN32_SkColorType);
         push_src("image", "color_codec_HPZR30w", src);
+        // TODO (msarett):
+        // Should we test this Dst in F16 mode (even though the Dst gamma is 2.2 instead of sRGB)?
 
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode);
-        push_src("image", "color_codec_sRGB", src);
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode, kN32_SkColorType);
+        push_src("image", "color_codec_sRGB_kN32", src);
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kDst_sRGB_Mode, kRGBA_F16_SkColorType);
+        push_src("image", "color_codec_sRGB_kF16", src);
 
 #if defined(SK_TEST_QCMS)
-        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kQCMS_HPZR30w_Mode);
+        src = new ColorCodecSrc(colorImage, ColorCodecSrc::kQCMS_HPZR30w_Mode, kN32_SkColorType);
         push_src("image", "color_codec_QCMS_HPZR30w", src);
 #endif
     }
@@ -853,6 +858,7 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     VIA("pic",       ViaPicture,           wrapped);
     VIA("2ndpic",    ViaSecondPicture,     wrapped);
     VIA("sp",        ViaSingletonPictures, wrapped);
+    VIA("defer",     ViaDefer,             wrapped);
     VIA("tiles",     ViaTiles, 256, 256, nullptr,            wrapped);
     VIA("tiles_rt",  ViaTiles, 256, 256, new SkRTreeFactory, wrapped);
 

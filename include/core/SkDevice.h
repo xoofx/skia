@@ -22,6 +22,7 @@ struct SkIRect;
 class SkMatrix;
 class SkMetaData;
 class SkRegion;
+class SkSpecialImage;
 class GrRenderTarget;
 
 class SK_API SkBaseDevice : public SkRefCnt {
@@ -273,6 +274,13 @@ protected:
 
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len, const SkPath&,
                                 const SkMatrix*, const SkPaint&);
+    virtual void drawTextRSXform(const SkDraw&, const void* text, size_t len, const SkRSXform[],
+                                 const SkPaint&);
+
+    virtual void drawSpecial(const SkDraw&, SkSpecialImage*, int x, int y, const SkPaint&);
+    virtual sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&);
+    virtual sk_sp<SkSpecialImage> makeSpecial(const SkImage*);
+    virtual sk_sp<SkSpecialImage> snapSpecial();
 
     bool readPixels(const SkImageInfo&, void* dst, size_t rowBytes, int x, int y);
 
@@ -308,19 +316,6 @@ protected:
 
     virtual bool onAccessPixels(SkPixmap*) { return false; }
 
-    /**
-     *  PRIVATE / EXPERIMENTAL -- do not call
-     *  This entry point gives the backend an opportunity to take over the rendering
-     *  of 'picture'. If optimization data is available (due to an earlier
-     *  'optimize' call) this entry point should make use of it and return true
-     *  if all rendering has been done. If false is returned, SkCanvas will
-     *  perform its own rendering pass. It is acceptable for the backend
-     *  to perform some device-specific warm up tasks and then let SkCanvas
-     *  perform the main rendering loop (by return false from here).
-     */
-    virtual bool EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
-                                          const SkPaint*);
-
     struct CreateInfo {
         static SkPixelGeometry AdjustGeometry(const SkImageInfo&, TileUsage, SkPixelGeometry,
                                               bool preserveLCDText);
@@ -332,22 +327,20 @@ protected:
             : fInfo(info)
             , fTileUsage(tileUsage)
             , fPixelGeometry(AdjustGeometry(info, tileUsage, geo, false))
-            , fForImageFilter(false) {}
+        {}
 
         CreateInfo(const SkImageInfo& info,
                    TileUsage tileUsage,
                    SkPixelGeometry geo,
-                   bool preserveLCDText,
-                   bool forImageFilter)
+                   bool preserveLCDText)
             : fInfo(info)
             , fTileUsage(tileUsage)
             , fPixelGeometry(AdjustGeometry(info, tileUsage, geo, preserveLCDText))
-            , fForImageFilter(forImageFilter) {}
+        {}
 
         const SkImageInfo       fInfo;
         const TileUsage         fTileUsage;
         const SkPixelGeometry   fPixelGeometry;
-        const bool              fForImageFilter;
     };
 
     /**
@@ -382,6 +375,7 @@ private:
     friend class SkDeviceFilteredPaint;
     friend class SkNoPixelsBitmapDevice;
     friend class SkSurface_Raster;
+    friend class DeviceTestingAccess;
 
     // used to change the backend's pixels (and possibly config/rowbytes)
     // but cannot change the width/height, so there should be no change to

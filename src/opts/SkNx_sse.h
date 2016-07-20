@@ -8,7 +8,6 @@
 #ifndef SkNx_sse_DEFINED
 #define SkNx_sse_DEFINED
 
-#include "SkCpu.h"
 #include <immintrin.h>
 
 // This file may assume <= SSE2, but must check SK_CPU_SSE_LEVEL for anything more recent.
@@ -91,15 +90,9 @@ public:
 
     SkNx abs() const { return _mm_andnot_ps(_mm_set1_ps(-0.0f), fVec); }
     SkNx floor() const {
-        if (SkCpu::Supports(SkCpu::SSE41)) {
-            __m128 r;
-        #if defined(__GNUC__) || defined(__clang__)
-            asm("roundps $0x1, %[fVec], %[r]" : [r]"=x"(r) : [fVec]"x"(fVec));
-        #else
-            r = _mm_floor_ps(fVec);
-        #endif
-            return r;
-        }
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
+        return _mm_floor_ps(fVec);
+    #else
         // Emulate _mm_floor_ps() with SSE2:
         //   - roundtrip through integers via truncation
         //   - subtract 1 if that's too big (possible for negative values).
@@ -108,6 +101,7 @@ public:
         __m128 roundtrip = _mm_cvtepi32_ps(_mm_cvttps_epi32(fVec));
         __m128 too_big = _mm_cmpgt_ps(roundtrip, fVec);
         return _mm_sub_ps(roundtrip, _mm_and_ps(too_big, _mm_set1_ps(1.0f)));
+    #endif
     }
 
     SkNx   sqrt() const { return _mm_sqrt_ps (fVec);  }
@@ -124,12 +118,12 @@ public:
     bool anyTrue() const { return 0x0000 != _mm_movemask_epi8(_mm_castps_si128(fVec)); }
 
     SkNx thenElse(const SkNx& t, const SkNx& e) const {
-#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
         return _mm_blendv_ps(e.fVec, t.fVec, fVec);
-#else
+    #else
         return _mm_or_ps(_mm_and_ps   (fVec, t.fVec),
                          _mm_andnot_ps(fVec, e.fVec));
-#endif
+    #endif
     }
 
     __m128 fVec;
@@ -156,15 +150,30 @@ public:
                                   _mm_shuffle_epi32(mul31, _MM_SHUFFLE(0,0,2,0)));
     }
 
+    SkNx operator & (const SkNx& o) const { return _mm_and_si128(fVec, o.fVec); }
     SkNx operator | (const SkNx& o) const { return _mm_or_si128(fVec, o.fVec); }
+    SkNx operator ^ (const SkNx& o) const { return _mm_xor_si128(fVec, o.fVec); }
 
     SkNx operator << (int bits) const { return _mm_slli_epi32(fVec, bits); }
     SkNx operator >> (int bits) const { return _mm_srai_epi32(fVec, bits); }
+
+    SkNx operator == (const SkNx& o) const { return _mm_cmpeq_epi32 (fVec, o.fVec); }
+    SkNx operator  < (const SkNx& o) const { return _mm_cmplt_epi32 (fVec, o.fVec); }
+    SkNx operator  > (const SkNx& o) const { return _mm_cmpgt_epi32 (fVec, o.fVec); }
 
     int operator[](int k) const {
         SkASSERT(0 <= k && k < 4);
         union { __m128i v; int is[4]; } pun = {fVec};
         return pun.is[k&3];
+    }
+
+    SkNx thenElse(const SkNx& t, const SkNx& e) const {
+    #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
+        return _mm_blendv_epi8(e.fVec, t.fVec, fVec);
+    #else
+        return _mm_or_si128(_mm_and_si128   (fVec, t.fVec),
+                            _mm_andnot_si128(fVec, e.fVec));
+    #endif
     }
 
     __m128i fVec;
@@ -314,18 +323,23 @@ template <> /*static*/ inline Sk4i SkNx_cast<int, float>(const Sk4f& src) {
     return _mm_cvttps_epi32(src.fVec);
 }
 
-template<> /*static*/ inline Sk4h SkNx_cast<uint16_t, float>(const Sk4f& src) {
-    auto _32 = _mm_cvttps_epi32(src.fVec);
-    // Ideally we'd use _mm_packus_epi32 here.  But that's SSE4.1+.
-#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
+template<> /*static*/ inline Sk4h SkNx_cast<uint16_t, int>(const Sk4i& src) {
+#if 0 && SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
+    // TODO: This seems to be causing code generation problems.   Investigate?
+    return _mm_packus_epi32(src.fVec);
+#elif SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSSE3
     // With SSSE3, we can just shuffle the low 2 bytes from each lane right into place.
     const int _ = ~0;
-    return _mm_shuffle_epi8(_32, _mm_setr_epi8(0,1, 4,5, 8,9, 12,13, _,_,_,_,_,_,_,_));
+    return _mm_shuffle_epi8(src.fVec, _mm_setr_epi8(0,1, 4,5, 8,9, 12,13, _,_,_,_,_,_,_,_));
 #else
-    // With SSE2, we have to emulate _mm_packus_epi32 with _mm_packs_epi32:
-    _32 = _mm_sub_epi32(_32, _mm_set1_epi32((int)0x00008000));
-    return _mm_add_epi16(_mm_packs_epi32(_32, _32), _mm_set1_epi16((short)0x8000));
+    // With SSE2, we have to sign extend our input, making _mm_packs_epi32 do the pack we want.
+    __m128i x = _mm_srai_epi32(_mm_slli_epi32(src.fVec, 16), 16);
+    return _mm_packs_epi32(x,x);
 #endif
+}
+
+template<> /*static*/ inline Sk4h SkNx_cast<uint16_t, float>(const Sk4f& src) {
+    return SkNx_cast<uint16_t>(SkNx_cast<int>(src));
 }
 
 template<> /*static*/ inline Sk4b SkNx_cast<uint8_t, float>(const Sk4f& src) {
@@ -375,6 +389,28 @@ template<> /*static*/ inline Sk4h SkNx_cast<uint16_t, uint8_t>(const Sk4b& src) 
 
 template<> /*static*/ inline Sk4b SkNx_cast<uint8_t, uint16_t>(const Sk4h& src) {
     return _mm_packus_epi16(src.fVec, src.fVec);
+}
+
+template<> /*static*/ inline Sk4i SkNx_cast<int, uint16_t>(const Sk4h& src) {
+    return _mm_unpacklo_epi16(src.fVec, _mm_setzero_si128());
+}
+
+template<> /*static*/ inline Sk4b SkNx_cast<uint8_t, int>(const Sk4i& src) {
+    return _mm_packus_epi16(_mm_packus_epi16(src.fVec, src.fVec), src.fVec);
+}
+
+static inline Sk4i Sk4f_round(const Sk4f& x) {
+    return _mm_cvtps_epi32(x.fVec);
+}
+
+static inline void Sk4h_store4(void* dst, const Sk4h& r, const Sk4h& g, const Sk4h& b,
+                               const Sk4h& a) {
+    __m128i rg = _mm_unpacklo_epi16(r.fVec, g.fVec);
+    __m128i ba = _mm_unpacklo_epi16(b.fVec, a.fVec);
+    __m128i lo = _mm_unpacklo_epi32(rg, ba);
+    __m128i hi = _mm_unpackhi_epi32(rg, ba);
+    _mm_storeu_si128(((__m128i*) dst) + 0, lo);
+    _mm_storeu_si128(((__m128i*) dst) + 1, hi);
 }
 
 #endif//SkNx_sse_DEFINED

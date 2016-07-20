@@ -167,7 +167,12 @@ def get_args(bot):
     # is fairly slow and not platform-specific. So we just disable it on all of
     # Android and iOS. skia:5438
     blacklist.extend('_ test _ GrShape'.split(' '))
- 
+
+  if 'Win8' in bot:
+    # bungeman: "Doesn't work on Windows anyway, produces unstable GMs with
+    # 'Unexpected error' from DirectWrite"
+    blacklist.extend('_ gm _ fontscalerdistortable'.split(' '))
+
   # skia:4095
   for test in ['bleed_image',
                'c_gms',
@@ -213,6 +218,10 @@ def get_args(bot):
     blacklist.extend('_ image _ interlaced1.png'.split(' '))
     blacklist.extend('_ image _ interlaced2.png'.split(' '))
     blacklist.extend('_ image _ interlaced3.png'.split(' '))
+    for raw_ext in r:
+      blacklist.extend(('_ image _ .%s' % raw_ext).split(' '))
+
+  if 'Nexus9' in bot:
     for raw_ext in r:
       blacklist.extend(('_ image _ .%s' % raw_ext).split(' '))
 
@@ -290,6 +299,7 @@ def self_test():
     'Test-Win-MSVC-GCE-CPU-AVX2-x86_64-Debug',
     'Test-Win10-MSVC-ShuttleA-GPU-GTX660-x86_64-Debug-Vulkan',
     'Test-Win7-MSVC-ShuttleA-GPU-HD2000-x86-Debug-ANGLE',
+    'Test-Win8-MSVC-GCE-CPU-AVX2-x86_64-Debug',
   ]
 
   cov = coverage.coverage()

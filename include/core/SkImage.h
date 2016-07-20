@@ -120,15 +120,6 @@ public:
                                                  SkAlphaType = kPremul_SkAlphaType);
 
     /**
-     *  Create a new image by copying the pixels from the specified descriptor. No reference is
-     *  kept to the original platform texture.
-     *
-     *  Will return NULL if the specified descriptor is unsupported.
-     */
-    static sk_sp<SkImage> MakeFromTextureCopy(GrContext*, const GrBackendTextureDesc&,
-                                              SkAlphaType = kPremul_SkAlphaType);
-
-    /**
      *  Create a new image by copying the pixels from the specified y, u, v textures. The data
      *  from the textures is immediately ingested into the image and the textures can be modified or
      *  deleted after the function returns. The image will have the dimensions of the y texture.
@@ -330,6 +321,11 @@ public:
     sk_sp<SkImage> makeTextureImage(GrContext*) const;
 
     /**
+     * If the image is texture-backed this will make a raster copy of it (or nullptr if reading back
+     * the pixels fails). Otherwise, it returns the original image.
+     */
+    sk_sp<SkImage> makeNonTextureImage() const;
+    /**
      *  Apply a given image filter to this image, and return the filtered result.
      *
      *  The subset represents the active portion of this image. The return value is similarly an
@@ -438,8 +434,6 @@ public:
                                    TextureReleaseProc, ReleaseContext);
     static SkImage* NewFromAdoptedTexture(GrContext*, const GrBackendTextureDesc&,
                                           SkAlphaType = kPremul_SkAlphaType);
-    static SkImage* NewFromTextureCopy(GrContext*, const GrBackendTextureDesc&,
-                                       SkAlphaType = kPremul_SkAlphaType);
     static SkImage* NewFromYUVTexturesCopy(GrContext*, SkYUVColorSpace,
                                            const GrBackendObject yuvTextureHandles[3],
                                            const SkISize yuvSizes[3],

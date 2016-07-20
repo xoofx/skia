@@ -9,7 +9,6 @@
 #include "GrContextOptions.h"
 #include "GrDrawingManager.h"
 #include "GrDrawContext.h"
-#include "GrLayerCache.h"
 #include "GrResourceCache.h"
 #include "GrResourceProvider.h"
 #include "GrSoftwarePathRenderer.h"
@@ -88,8 +87,6 @@ void GrContext::initCommon(const GrContextOptions& options) {
     fResourceCache->setOverBudgetCallback(OverBudgetCB, this);
     fResourceProvider = new GrResourceProvider(fGpu, fResourceCache, &fSingleOwner);
 
-    fLayerCache.reset(new GrLayerCache(this));
-
     fDidTestPMConversions = false;
 
     GrDrawTarget::Options dtOptions;
@@ -152,7 +149,6 @@ void GrContext::abandonContext() {
     fGpu->disconnect(GrGpu::DisconnectType::kAbandon);
 
     fBatchFontCache->freeAll();
-    fLayerCache->freeAll();
     fTextBlobCache->freeAll();
 }
 
@@ -171,7 +167,6 @@ void GrContext::releaseResourcesAndAbandonContext() {
     fGpu->disconnect(GrGpu::DisconnectType::kCleanup);
 
     fBatchFontCache->freeAll();
-    fLayerCache->freeAll();
     fTextBlobCache->freeAll();
 }
 
@@ -186,7 +181,6 @@ void GrContext::freeGpuResources() {
     this->flush();
 
     fBatchFontCache->freeAll();
-    fLayerCache->freeAll();
 
     fDrawingManager->freeGpuResources();
 
@@ -443,21 +437,20 @@ bool GrContext::readSurfacePixels(GrSurface* src,
     SkAutoTUnref<GrSurface> surfaceToRead(SkRef(src));
     bool didTempDraw = false;
     if (GrGpu::kNoDraw_DrawPreference != drawPreference) {
-        if (tempDrawInfo.fUseExactScratch) {
+        if (SkBackingFit::kExact == tempDrawInfo.fTempSurfaceFit) {
             // We only respect this when the entire src is being read. Otherwise we can trigger too
             // many odd ball texture sizes and trash the cache.
             if (width != src->width() || height != src->height()) {
-                tempDrawInfo.fUseExactScratch = false;
+                tempDrawInfo.fTempSurfaceFit= SkBackingFit::kApprox;
             }
         }
-        SkAutoTUnref<GrTexture> temp;
-        if (tempDrawInfo.fUseExactScratch) {
-            temp.reset(this->textureProvider()->createTexture(tempDrawInfo.fTempSurfaceDesc,
-                                                              SkBudgeted::kYes));
-        } else {
-            temp.reset(this->textureProvider()->createApproxTexture(tempDrawInfo.fTempSurfaceDesc));
-        }
-        if (temp) {
+        sk_sp<GrDrawContext> tempDC = this->newDrawContext(tempDrawInfo.fTempSurfaceFit,
+                                                           tempDrawInfo.fTempSurfaceDesc.fWidth,
+                                                           tempDrawInfo.fTempSurfaceDesc.fHeight,
+                                                           tempDrawInfo.fTempSurfaceDesc.fConfig,
+                                                           tempDrawInfo.fTempSurfaceDesc.fSampleCnt,
+                                                           tempDrawInfo.fTempSurfaceDesc.fOrigin);
+        if (tempDC) {
             SkMatrix textureMatrix;
             textureMatrix.setTranslate(SkIntToScalar(left), SkIntToScalar(top));
             textureMatrix.postIDiv(src->width(), src->height());
@@ -470,10 +463,10 @@ bool GrContext::readSurfacePixels(GrSurface* src,
                 } else if (GrGpu::kCallerPrefersDraw_DrawPreference == drawPreference) {
                     // We only wanted to do the draw in order to perform the unpremul so don't
                     // bother.
-                    temp.reset(nullptr);
+                    tempDC.reset(nullptr);
                 }
             }
-            if (!fp && temp) {
+            if (!fp && tempDC) {
                 fp = GrConfigConversionEffect::Make(src->asTexture(), tempDrawInfo.fSwizzle,
                                                     GrConfigConversionEffect::kNone_PMConversion,
                                                     textureMatrix);
@@ -484,10 +477,8 @@ bool GrContext::readSurfacePixels(GrSurface* src,
                 paint.setPorterDuffXPFactory(SkXfermode::kSrc_Mode);
                 paint.setAllowSRGBInputs(true);
                 SkRect rect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
-                sk_sp<GrDrawContext> drawContext(
-                                            this->drawContext(sk_ref_sp(temp->asRenderTarget())));
-                drawContext->drawRect(GrNoClip(), paint, SkMatrix::I(), rect, nullptr);
-                surfaceToRead.reset(SkRef(temp.get()));
+                tempDC->drawRect(GrNoClip(), paint, SkMatrix::I(), rect, nullptr);
+                surfaceToRead.reset(tempDC->asTexture().release());
                 left = 0;
                 top = 0;
                 didTempDraw = true;
@@ -549,7 +540,7 @@ bool GrContext::applyGamma(GrRenderTarget* dst, GrTexture* src, SkScalar gamma){
     }
 
     GrPaint paint;
-    paint.addColorTextureProcessor(src, GrCoordTransform::MakeDivByTextureWHMatrix(src));
+    paint.addColorTextureProcessor(src, nullptr, GrCoordTransform::MakeDivByTextureWHMatrix(src));
     if (!SkScalarNearlyEqual(gamma, 1.0f)) {
         paint.addColorFragmentProcessor(GrGammaEffect::Make(gamma));
     }

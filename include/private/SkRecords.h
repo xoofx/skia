@@ -47,6 +47,7 @@ namespace SkRecords {
     M(Save)                                                         \
     M(SaveLayer)                                                    \
     M(SetMatrix)                                                    \
+    M(TranslateZ)                                                   \
     M(Concat)                                                       \
     M(ClipPath)                                                     \
     M(ClipRRect)                                                    \
@@ -72,6 +73,7 @@ namespace SkRecords {
     M(DrawPosTextH)                                                 \
     M(DrawText)                                                     \
     M(DrawTextOnPath)                                               \
+    M(DrawTextRSXform)                                              \
     M(DrawRRect)                                                    \
     M(DrawRect)                                                     \
     M(DrawTextBlob)                                                 \
@@ -217,6 +219,8 @@ RECORD(SetMatrix, 0,
 RECORD(Concat, 0,
         TypedMatrix matrix);
 
+RECORD(TranslateZ, 0, SkScalar z);
+
 struct RegionOpAndAA {
     RegionOpAndAA() {}
     RegionOpAndAA(SkRegion::Op op, bool aa) : op(op), aa(aa) {}
@@ -344,6 +348,12 @@ RECORD(DrawTextOnPath, kDraw_Tag|kHasText_Tag,
         size_t byteLength;
         PreCachedPath path;
         TypedMatrix matrix);
+RECORD(DrawTextRSXform, kDraw_Tag|kHasText_Tag,
+        SkPaint paint;
+        PODArray<char> text;
+        size_t byteLength;
+        PODArray<SkRSXform> xforms;
+        Optional<SkRect> cull);
 RECORD(DrawPatch, kDraw_Tag,
         SkPaint paint;
         PODArray<SkPoint> cubics;

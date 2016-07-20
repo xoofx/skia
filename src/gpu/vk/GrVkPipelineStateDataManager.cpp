@@ -233,12 +233,10 @@ template<int N> struct set_uniform_matrix {
         buffer = static_cast<char*>(buffer) + uniformOffset;
         for (int i = 0; i < count; ++i) {
             const float* matrix = &matrices[N * N * i];
-            memcpy(buffer, &matrix[0], N * sizeof(float));
-            buffer = static_cast<char*>(buffer) + 4*sizeof(float);
-            memcpy(buffer, &matrix[3], N * sizeof(float));
-            buffer = static_cast<char*>(buffer) + 4*sizeof(float);
-            memcpy(buffer, &matrix[6], N * sizeof(float));
-            buffer = static_cast<char*>(buffer) + 4*sizeof(float);
+            for (int j = 0; j < N; ++j) {
+                memcpy(buffer, &matrix[j * N], N * sizeof(float));
+                buffer = static_cast<char*>(buffer) + 4 * sizeof(float);
+            }
         }
     }
 };
@@ -251,7 +249,7 @@ template<> struct set_uniform_matrix<4> {
     }
 };
 
-bool GrVkPipelineStateDataManager::uploadUniformBuffers(const GrVkGpu* gpu,
+bool GrVkPipelineStateDataManager::uploadUniformBuffers(GrVkGpu* gpu,
                                                         GrVkUniformBuffer* vertexBuffer,
                                                         GrVkUniformBuffer* fragmentBuffer) const {
     bool updatedBuffer = false;

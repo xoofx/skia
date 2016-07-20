@@ -20,6 +20,7 @@
         'chrome_fuzz',
         'dump_record',
         'get_images_from_skps',
+        'get_current_monitor_profile',
         'gpuveto',
         'imgblur',
         'imgslice',
@@ -88,6 +89,38 @@
             'flags.gyp:flags',
             'skia_lib.gyp:skia_lib',
          ],
+    },
+    {
+        'target_name': 'monobench',
+        'type': 'executable',
+        'dependencies': [
+            'flags.gyp:flags',
+            'flags.gyp:flags_common',
+            'resources',
+            'skia_lib.gyp:skia_lib',
+            'timer',
+            'pdf.gyp:pdf',
+            'tools.gyp:sk_tool_utils',
+        ],
+        'include_dirs': [
+            '../bench',
+            '../include/private',
+            '../src/core',
+            '../src/effects',
+            '../src/effects/gradients',
+            '../src/image',
+            '../src/gpu',
+            '../src/pdf',
+            '../src/utils',
+        ],
+        'sources': [
+            '../tools/monobench.cpp',
+            '../bench/Benchmark.cpp',
+            '<!@(python find.py ../bench "*Bench.cpp")',
+        ],
+        'sources!': [
+            '../bench/GMBench.cpp',
+        ],
     },
     {
       'target_name': 'chrome_fuzz',
@@ -285,6 +318,21 @@
       ],
     },
     {
+      'target_name': 'get_current_monitor_profile',
+      'type': 'executable',
+      'sources': [
+        '../tools/get_current_monitor_profile.cpp',
+      ],
+      'include_dirs': [
+        '../src/core',
+        '../include/private',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
+    {
       'target_name': 'gpuveto',
       'type': 'executable',
       'sources': [
@@ -412,7 +460,10 @@
     {
       'target_name': 'using_skia_and_harfbuzz',
       'type': 'executable',
-      'sources': [ '../tools/using_skia_and_harfbuzz.cpp' ],
+      'sources': [
+        '../tools/using_skia_and_harfbuzz.cpp',
+        '../tools/SkShaper.cpp',
+      ],
       'dependencies': [
         'skia_lib.gyp:skia_lib',
         'pdf.gyp:pdf',
@@ -481,7 +532,6 @@
           '<(skia_include_path)/images',
           '<(skia_include_path)/pathops',
           '<(skia_include_path)/ports',
-          '<(skia_include_path)/svg/parser',
           '<(skia_include_path)/utils',
           '<(skia_include_path)/views',
           '<(skia_include_path)/xml',
@@ -496,7 +546,6 @@
           '<(skia_include_path)/utils/win',
           '<(skia_include_path)/utils/SkDebugUtils.h',
           '<(skia_include_path)/utils/SkJSONCPP.h',
-          '<(skia_include_path)/views/SkOSWindow_Android.h',
           '<(skia_include_path)/views/SkOSWindow_iOS.h',
           '<(skia_include_path)/views/SkOSWindow_Mac.h',
           '<(skia_include_path)/views/SkOSWindow_SDL.h',

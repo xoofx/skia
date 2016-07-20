@@ -149,7 +149,7 @@ void SkGpuDevice::drawTexture(GrTexture* tex, const SkRect& dst, const SkPaint& 
     textureMat[SkMatrix::kMTransX] = -dst.fLeft/dst.width();
     textureMat[SkMatrix::kMTransY] = -dst.fTop/dst.height();
 
-    grPaint.addColorTextureProcessor(tex, textureMat);
+    grPaint.addColorTextureProcessor(tex, nullptr, textureMat);
 
     fDrawContext->drawRect(GrNoClip(), grPaint, mat, dst);
 }
@@ -294,10 +294,8 @@ public:
                        const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override { return false; };
 
-    void onGetMultisampleSpecs(GrRenderTarget* rt,
-                               const GrStencilSettings&,
-                               int* effectiveSampleCnt,
-                               SkAutoTDeleteArray<SkPoint>*) override {
+    void onGetMultisampleSpecs(GrRenderTarget* rt, const GrStencilSettings&,
+                               int* effectiveSampleCnt, SamplePattern*) override {
         *effectiveSampleCnt = rt->desc().fSampleCnt;
     }
 

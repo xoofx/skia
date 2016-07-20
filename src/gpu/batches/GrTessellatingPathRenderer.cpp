@@ -238,12 +238,8 @@ private:
         // Because the clip bounds are used to add a contour for inverse fills, they must also
         // include the path bounds.
         fClipBounds.join(pathBounds);
-        if (shape.inverseFilled()) {
-            fBounds = fClipBounds;
-        } else {
-            fBounds = pathBounds;
-        }
-        viewMatrix.mapRect(&fBounds);
+        const SkRect& srcBounds = shape.inverseFilled() ? fClipBounds : pathBounds;
+        this->setTransformedBounds(srcBounds, viewMatrix, HasAABloat::kNo, IsZeroArea::kNo);
     }
 
     GrColor                 fColor;
@@ -271,7 +267,8 @@ bool GrTessellatingPathRenderer::onDrawPath(const DrawPathArgs& args) {
     vmi.mapRect(&clipBounds);
     SkPath path;
     args.fShape->asPath(&path);
-    SkAutoTUnref<GrDrawBatch> batch(TessellatingPathBatch::Create(args.fColor, *args.fShape,
+    SkAutoTUnref<GrDrawBatch> batch(TessellatingPathBatch::Create(args.fPaint->getColor(),
+                                                                  *args.fShape,
                                                                   *args.fViewMatrix, clipBounds));
 
     GrPipelineBuilder pipelineBuilder(*args.fPaint, args.fDrawContext->mustUseHWAA(*args.fPaint));

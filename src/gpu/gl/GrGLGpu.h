@@ -28,6 +28,8 @@ class GrPipeline;
 class GrNonInstancedMesh;
 class GrSwizzle;
 
+namespace gr_instanced { class GLInstancedRendering; }
+
 #ifdef SK_DEBUG
 #define PROGRAM_CACHE_STATS
 #endif
@@ -54,7 +56,7 @@ public:
         return static_cast<GrGLPathRendering*>(pathRendering());
     }
 
-    void discard(GrRenderTarget*);
+    gr_instanced::InstancedRendering* createInstancedRenderingIfSupported() override;
 
     // Used by GrGLProgram to configure OpenGL state.
     void bindTexture(int unitIdx, const GrTextureParams& params, bool allowSRGBInputs,
@@ -90,7 +92,7 @@ public:
     // returns the GL target the buffer was bound to.
     // When 'type' is kIndex_GrBufferType, this function will also implicitly bind the default VAO.
     // If the caller wishes to bind an index buffer to a specific VAO, it can call glBind directly.
-    GrGLenum bindBuffer(GrBufferType type, const GrGLBuffer*);
+    GrGLenum bindBuffer(GrBufferType type, const GrBuffer*);
 
     // Called by GrGLBuffer after its buffer object has been destroyed.
     void notifyBufferReleased(const GrGLBuffer*);
@@ -218,10 +220,8 @@ private:
                        const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    void onGetMultisampleSpecs(GrRenderTarget*,
-                               const GrStencilSettings&,
-                               int* effectiveSampleCnt,
-                               SkAutoTDeleteArray<SkPoint>* sampleLocations) override;
+    void onGetMultisampleSpecs(GrRenderTarget*, const GrStencilSettings&,
+                               int* effectiveSampleCnt, SamplePattern*) override;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -467,7 +467,7 @@ private:
          *
          * The returned GrGLAttribArrayState should be used to set vertex attribute arrays.
          */
-        GrGLAttribArrayState* bindInternalVertexArray(GrGLGpu*, const GrGLBuffer* ibuff = nullptr);
+        GrGLAttribArrayState* bindInternalVertexArray(GrGLGpu*, const GrBuffer* ibuff = nullptr);
 
     private:
         GrGLuint                fBoundVertexArrayID;
@@ -599,6 +599,7 @@ private:
 
     typedef GrGpu INHERITED;
     friend class GrGLPathRendering; // For accessing setTextureUnit.
+    friend class gr_instanced::GLInstancedRendering; // For accessing flushGLState.
 };
 
 #endif

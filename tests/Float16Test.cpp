@@ -55,45 +55,34 @@ DEF_TEST(color_half_float, reporter) {
     }
 }
 
-DEF_TEST(float_to_half, reporter) {
-    const float    fs[] = {    1.0,    2.0,    3.0,    4.0,    5.0,    6.0,    7.0 };
-    const uint16_t hs[] = { 0x3c00, 0x4000, 0x4200, 0x4400, 0x4500, 0x4600, 0x4700 };
-
-    uint16_t hscratch[7];
-    SkOpts::float_to_half(hscratch, fs, 7);
-    REPORTER_ASSERT(reporter, 0 == memcmp(hscratch, hs, sizeof(hs)));
-
-    float fscratch[7];
-    SkOpts::half_to_float(fscratch, hs, 7);
-    REPORTER_ASSERT(reporter, 0 == memcmp(fscratch, fs, sizeof(fs)));
-}
-
 static uint32_t u(float f) {
     uint32_t x;
     memcpy(&x, &f, 4);
     return x;
 }
 
-DEF_TEST(HalfToFloat_01, r) {
-    for (uint16_t h = 0; h < 0x8000; h++) {
+DEF_TEST(HalfToFloat_finite, r) {
+    for (uint32_t h = 0; h <= 0xffff; h++) {
         float f = SkHalfToFloat(h);
-        if (f >= 0 && f <= 1) {
-            float got = SkHalfToFloat_01(h)[0];
+        if (isfinite(f)) {
+            float got = SkHalfToFloat_finite(h)[0];
             if (got != f) {
                 SkDebugf("0x%04x -> 0x%08x (%g), want 0x%08x (%g)\n",
                         h,
                         u(got), got,
                         u(f), f);
             }
-            REPORTER_ASSERT(r, SkHalfToFloat_01(h)[0] == f);
-            REPORTER_ASSERT(r, SkFloatToHalf_01(SkHalfToFloat_01(h)) == h);
+            REPORTER_ASSERT(r, SkHalfToFloat_finite(h)[0] == f);
+            uint64_t result;
+            SkFloatToHalf_finite(SkHalfToFloat_finite(h)).store(&result);
+            REPORTER_ASSERT(r, result == h);
         }
     }
 }
 
-DEF_TEST(FloatToHalf_01, r) {
+DEF_TEST(FloatToHalf_finite, r) {
 #if 0
-    for (uint32_t bits = 0; bits < 0x80000000; bits++) {
+    for (uint64_t bits = 0; bits <= 0xffffffff; bits++) {
 #else
     SkRandom rand;
     for (int i = 0; i < 1000000; i++) {
@@ -101,14 +90,14 @@ DEF_TEST(FloatToHalf_01, r) {
 #endif
         float f;
         memcpy(&f, &bits, 4);
-        if (f >= 0 && f <= 1) {
-            uint16_t h1 = (uint16_t)SkFloatToHalf_01(Sk4f(f,0,0,0)),
+        if (isfinite(f) && isfinite(SkHalfToFloat(SkFloatToHalf(f)))) {
+            uint16_t h1 = SkFloatToHalf_finite(Sk4f(f,0,0,0))[0],
                      h2 = SkFloatToHalf(f);
             bool ok = (h1 == h2 || h1 == h2-1);
             REPORTER_ASSERT(r, ok);
             if (!ok) {
-                SkDebugf("%08x (%d) -> %04x (%d), want %04x (%d)\n",
-                         bits, bits>>23, h1, h1>>10, h2, h2>>10);
+                SkDebugf("%08x (%g) -> %04x, want %04x (%g)\n",
+                         bits, f, h1, h2, SkHalfToFloat(h2));
                 break;
             }
         }

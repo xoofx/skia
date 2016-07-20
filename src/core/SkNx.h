@@ -110,7 +110,8 @@ struct SkNx<1,T> {
     SkNx() = default;
     SkNx(T v) : fVal(v) {}
 
-    T operator[](int k) const {
+    // Android complains against unused parameters, so we guard it
+    T operator[](int SkDEBUGCODE(k)) const {
         SkASSERT(k == 0);
         return fVal;
     }
@@ -299,6 +300,24 @@ typedef SkNx<4,       int> Sk4i;
     #include "../opts/SkNx_sse.h"
 #elif !defined(SKNX_NO_SIMD) && defined(SK_ARM_HAS_NEON)
     #include "../opts/SkNx_neon.h"
+#else
+
+SI Sk4i Sk4f_round(const Sk4f& x) {
+    return { (int) lrintf (x[0]),
+             (int) lrintf (x[1]),
+             (int) lrintf (x[2]),
+             (int) lrintf (x[3]), };
+}
+
+// Transpose 4 Sk4h and store (256 bits total).
+SI void Sk4h_store4(void* dst, const Sk4h& r, const Sk4h& g, const Sk4h& b, const Sk4h& a) {
+    uint64_t* dst64 = (uint64_t*) dst;
+    Sk4h(r[0], g[0], b[0], a[0]).store(dst64 + 0);
+    Sk4h(r[1], g[1], b[1], a[1]).store(dst64 + 1);
+    Sk4h(r[2], g[2], b[2], a[2]).store(dst64 + 2);
+    Sk4h(r[3], g[3], b[3], a[3]).store(dst64 + 3);
+}
+
 #endif
 
 SI void Sk4f_ToBytes(uint8_t p[16], const Sk4f& a, const Sk4f& b, const Sk4f& c, const Sk4f& d) {

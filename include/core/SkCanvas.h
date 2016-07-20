@@ -419,10 +419,17 @@ public:
     */
     void scale(SkScalar sx, SkScalar sy);
 
-    /** Preconcat the current matrix with the specified rotation.
+    /** Preconcat the current matrix with the specified rotation about the origin.
         @param degrees  The amount to rotate, in degrees
     */
     void rotate(SkScalar degrees);
+
+    /** Preconcat the current matrix with the specified rotation about a given point.
+        @param degrees  The amount to rotate, in degrees
+        @param px  The x coordinate of the point to rotate about.
+        @param py  The y coordinate of the point to rotate about.
+    */
+    void rotate(SkScalar degrees, SkScalar px, SkScalar py);
 
     /** Preconcat the current matrix with the specified skew.
         @param sx   The amount to skew in X
@@ -443,6 +450,13 @@ public:
     /** Helper for setMatrix(identity). Sets the current matrix to identity.
     */
     void resetMatrix();
+
+    /** Add the specified translation to the current draw depth of the canvas.
+        @param z    The distance to translate in Z.
+                    Negative into screen, positive out of screen.
+                    Without translation, the draw depth defaults to 0.
+    */
+    void translateZ(SkScalar z);
 
     /**
      *  Modify the current clip with the specified rectangle.
@@ -989,6 +1003,14 @@ public:
     void drawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                         const SkMatrix* matrix, const SkPaint& paint);
 
+    /**
+     *  Draw the text with each character/glyph individually transformed by its xform.
+     *  If cullRect is not null, it is a conservative bounds of what will be drawn
+     *  taking into account the xforms and the paint, and will be used to accelerate culling.
+     */
+    void drawTextRSXform(const void* text, size_t byteLength, const SkRSXform[],
+                         const SkRect* cullRect, const SkPaint& paint);
+
     /** Draw the text blob, offset by (x,y), using the specified paint.
         @param blob     The text blob to be drawn
         @param x        The x-offset of the text being drawn
@@ -1245,6 +1267,10 @@ public:
     void temporary_internal_describeTopLayer(SkMatrix* matrix, SkIRect* clip_bounds);
 
 protected:
+    /** Returns the current (cumulative) draw depth of the canvas.
+      */
+    SkScalar getZ() const;
+
     /** After calling saveLayer(), there can be any number of devices that make
         up the top-most drawing area. LayerIter can be used to iterate through
         those devices. Note that the iterator is only valid until the next API
@@ -1289,6 +1315,9 @@ protected:
     // default impl defers to its device
     virtual bool onPeekPixels(SkPixmap*);
     virtual bool onAccessTopLayerPixels(SkPixmap*);
+    virtual SkImageInfo onImageInfo() const;
+    virtual bool onGetProps(SkSurfaceProps*) const;
+    virtual void onFlush();
 
     // Subclass save/restore notifiers.
     // Overriders should call the corresponding INHERITED method up the inheritance chain.
@@ -1307,6 +1336,7 @@ protected:
     virtual void didRestore() {}
     virtual void didConcat(const SkMatrix&) {}
     virtual void didSetMatrix(const SkMatrix&) {}
+    virtual void didTranslateZ(SkScalar) {}
 
     virtual void onDrawAnnotation(const SkRect&, const char key[], SkData* value);
     virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&);
@@ -1324,6 +1354,8 @@ protected:
     virtual void onDrawTextOnPath(const void* text, size_t byteLength,
                                   const SkPath& path, const SkMatrix* matrix,
                                   const SkPaint& paint);
+    virtual void onDrawTextRSXform(const void* text, size_t byteLength, const SkRSXform[],
+                                   const SkRect* cullRect, const SkPaint& paint);
 
     virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint);
@@ -1481,7 +1513,7 @@ private:
                                 SrcRectConstraint);
     void internalDrawPaint(const SkPaint& paint);
     void internalSaveLayer(const SaveLayerRec&, SaveLayerStrategy);
-    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*, bool isBitmapDevice);
+    void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*);
 
     // shared by save() and saveLayer()
     void internalSave();

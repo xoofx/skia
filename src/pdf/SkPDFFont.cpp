@@ -421,6 +421,16 @@ struct BFRange {
     SkUnichar fUnicode;
 };
 
+static void write_utf16be(SkDynamicMemoryWStream* wStream, SkUnichar utf32) {
+    uint16_t utf16[2] = {0, 0};
+    size_t len = SkUTF16_FromUnichar(utf32, utf16);
+    SkASSERT(len == 1 || len == 2);
+    SkPDFUtils::WriteUInt16BE(wStream, utf16[0]);
+    if (len == 2) {
+        SkPDFUtils::WriteUInt16BE(wStream, utf16[1]);
+    }
+}
+
 static void append_bfchar_section(const SkTDArray<BFChar>& bfchar,
                                   SkDynamicMemoryWStream* cmap) {
     // PDF spec defines that every bf* list can have at most 100 entries.
@@ -431,9 +441,9 @@ static void append_bfchar_section(const SkTDArray<BFChar>& bfchar,
         cmap->writeText(" beginbfchar\n");
         for (int j = 0; j < count; ++j) {
             cmap->writeText("<");
-            cmap->writeHexAsText(bfchar[i + j].fGlyphId, 4);
+            SkPDFUtils::WriteUInt16BE(cmap, bfchar[i + j].fGlyphId);
             cmap->writeText("> <");
-            cmap->writeHexAsText(bfchar[i + j].fUnicode, 4);
+            write_utf16be(cmap, bfchar[i + j].fUnicode);
             cmap->writeText(">\n");
         }
         cmap->writeText("endbfchar\n");
@@ -450,11 +460,11 @@ static void append_bfrange_section(const SkTDArray<BFRange>& bfrange,
         cmap->writeText(" beginbfrange\n");
         for (int j = 0; j < count; ++j) {
             cmap->writeText("<");
-            cmap->writeHexAsText(bfrange[i + j].fStart, 4);
+            SkPDFUtils::WriteUInt16BE(cmap, bfrange[i + j].fStart);
             cmap->writeText("> <");
-            cmap->writeHexAsText(bfrange[i + j].fEnd, 4);
+            SkPDFUtils::WriteUInt16BE(cmap, bfrange[i + j].fEnd);
             cmap->writeText("> <");
-            cmap->writeHexAsText(bfrange[i + j].fUnicode, 4);
+            write_utf16be(cmap, bfrange[i + j].fUnicode);
             cmap->writeText(">\n");
         }
         cmap->writeText("endbfrange\n");
@@ -652,41 +662,17 @@ bool SkPDFGlyphSet::has(uint16_t glyphID) const {
     return fBitSet.isBitSet(glyphID);
 }
 
-void SkPDFGlyphSet::merge(const SkPDFGlyphSet& usage) {
-    fBitSet.orBits(usage.fBitSet);
-}
-
 void SkPDFGlyphSet::exportTo(SkTDArray<unsigned int>* glyphIDs) const {
     fBitSet.exportTo(glyphIDs);
 }
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
 // class SkPDFGlyphSetMap
 ///////////////////////////////////////////////////////////////////////////////
-SkPDFGlyphSetMap::FontGlyphSetPair::FontGlyphSetPair(SkPDFFont* font,
-                                                     SkPDFGlyphSet* glyphSet)
-        : fFont(font),
-          fGlyphSet(glyphSet) {
-}
 
-SkPDFGlyphSetMap::SkPDFGlyphSetMap() {
-}
+SkPDFGlyphSetMap::SkPDFGlyphSetMap() {}
 
 SkPDFGlyphSetMap::~SkPDFGlyphSetMap() {
-    reset();
-}
-
-void SkPDFGlyphSetMap::merge(const SkPDFGlyphSetMap& usage) {
-    for (int i = 0; i < usage.fMap.count(); ++i) {
-        SkPDFGlyphSet* myUsage = getGlyphSetForFont(usage.fMap[i].fFont);
-        myUsage->merge(*(usage.fMap[i].fGlyphSet));
-    }
-}
-
-void SkPDFGlyphSetMap::reset() {
-    for (int i = 0; i < fMap.count(); ++i) {
-        delete fMap[i].fGlyphSet;  // Should not be nullptr.
-    }
     fMap.reset();
 }
 
@@ -702,14 +688,12 @@ SkPDFGlyphSet* SkPDFGlyphSetMap::getGlyphSetForFont(SkPDFFont* font) {
     int index = fMap.count();
     for (int i = 0; i < index; ++i) {
         if (fMap[i].fFont == font) {
-            return fMap[i].fGlyphSet;
+            return &fMap[i].fGlyphSet;
         }
     }
-    fMap.append();
-    index = fMap.count() - 1;
-    fMap[index].fFont = font;
-    fMap[index].fGlyphSet = new SkPDFGlyphSet();
-    return fMap[index].fGlyphSet;
+    FontGlyphSetPair& pair = fMap.push_back();
+    pair.fFont = font;
+    return &pair.fGlyphSet;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1153,13 +1137,11 @@ bool SkPDFCIDFont::populate(const SkPDFGlyphSet* subset) {
         sk_sp<SkPDFArray> widths(composeAdvanceData(
                 fontInfo()->fGlyphWidths, fontInfo()->fEmSize, &appendWidth,
                 &defaultWidth));
-        if (widths->size())
+        if (widths->size()) {
             this->insertObject("W", std::move(widths));
-        if (defaultWidth != 0) {
-            this->insertScalar(
-                    "DW",
-                    scaleFromFontUnits(defaultWidth, fontInfo()->fEmSize));
         }
+        this->insertScalar(
+                "DW", scaleFromFontUnits(defaultWidth, fontInfo()->fEmSize));
     }
     if (!fontInfo()->fVerticalMetrics.empty()) {
         struct SkAdvancedTypefaceMetrics::VerticalMetric defaultAdvance;

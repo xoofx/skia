@@ -25,10 +25,11 @@ public:
         SkASSERT(!fResource);
     }
 
-    VkBuffer buffer() const { return fResource->fBuffer; }
-    const GrVkAlloc& alloc() const { return fResource->fAlloc; }
+    VkBuffer            buffer() const { return fResource->fBuffer; }
+    const GrVkAlloc&    alloc() const { return fResource->fAlloc; }
     const GrVkResource* resource() const { return fResource; }
-    size_t         size() const { return fDesc.fSizeInBytes; }
+    size_t              size() const { return fDesc.fSizeInBytes; }
+    VkDeviceSize        offset() const { return fOffset;  }
 
     void addMemoryBarrier(const GrVkGpu* gpu,
                           VkAccessFlags srcAccessMask,
@@ -57,12 +58,17 @@ protected:
         Resource(VkBuffer buf, const GrVkAlloc& alloc, Type type)
             : INHERITED(), fBuffer(buf), fAlloc(alloc), fType(type) {}
 
+#ifdef SK_TRACE_VK_RESOURCES
+        void dumpInfo() const override {
+            SkDebugf("GrVkBuffer: %d (%d refs)\n", fBuffer, this->getRefCnt());
+        }
+#endif
         VkBuffer           fBuffer;
         GrVkAlloc          fAlloc;
         Type               fType;
 
     private:
-        void freeGPUData(const GrVkGpu* gpu) const;
+        void freeGPUData(const GrVkGpu* gpu) const override;
 
         typedef GrVkResource INHERITED;
     };
@@ -72,14 +78,14 @@ protected:
                                   const Desc& descriptor);
 
     GrVkBuffer(const Desc& desc, const GrVkBuffer::Resource* resource)
-        : fDesc(desc), fResource(resource), fMapPtr(nullptr) {
+        : fDesc(desc), fResource(resource), fOffset(0), fMapPtr(nullptr) {
     }
 
     void* vkMap(const GrVkGpu* gpu);
-    void vkUnmap(const GrVkGpu* gpu);
+    void vkUnmap(GrVkGpu* gpu);
     // If the caller passes in a non null createdNewBuffer, this function will set the bool to true
     // if it creates a new VkBuffer to upload the data to.
-    bool vkUpdateData(const GrVkGpu* gpu, const void* src, size_t srcSizeInBytes,
+    bool vkUpdateData(GrVkGpu* gpu, const void* src, size_t srcSizeInBytes,
                       bool* createdNewBuffer = nullptr);
 
     void vkAbandon();
@@ -91,6 +97,7 @@ private:
 
     Desc                    fDesc;
     const Resource*         fResource;
+    VkDeviceSize            fOffset;
     void*                   fMapPtr;
 
     typedef SkNoncopyable INHERITED;

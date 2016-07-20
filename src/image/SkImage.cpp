@@ -416,10 +416,6 @@ sk_sp<SkImage> SkImage::MakeFromAdoptedTexture(GrContext*, const GrBackendTextur
     return nullptr;
 }
 
-sk_sp<SkImage> SkImage::MakeFromTextureCopy(GrContext*, const GrBackendTextureDesc&, SkAlphaType) {
-    return nullptr;
-}
-
 sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace space,
                                                 const GrBackendObject yuvTextureHandles[3],
                                                 const SkISize yuvSizes[3],
@@ -429,6 +425,10 @@ sk_sp<SkImage> SkImage::MakeFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace 
 
 sk_sp<SkImage> SkImage::makeTextureImage(GrContext*) const {
     return nullptr;
+}
+
+sk_sp<SkImage> SkImage::makeNonTextureImage() const {
+    return sk_ref_sp(const_cast<SkImage*>(this));
 }
 
 #endif
@@ -470,11 +470,6 @@ SkImage* SkImage::NewFromTexture(GrContext* ctx, const GrBackendTextureDesc& des
 SkImage* SkImage::NewFromAdoptedTexture(GrContext* ctx, const GrBackendTextureDesc& desc,
                                         SkAlphaType at) {
     return MakeFromAdoptedTexture(ctx, desc, at).release();
-}
-
-SkImage* SkImage::NewFromTextureCopy(GrContext* ctx, const GrBackendTextureDesc& desc,
-                                     SkAlphaType at) {
-    return MakeFromTextureCopy(ctx, desc, at).release();
 }
 
 SkImage* SkImage::NewFromYUVTexturesCopy(GrContext* ctx, SkYUVColorSpace space,

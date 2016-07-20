@@ -15,8 +15,8 @@
 #include "GrVkUtil.h"
 
 #ifdef SK_TRACE_VK_RESOURCES
-SkTDynamicHash<GrVkResource, uint32_t> GrVkResource::fTrace;
-SkRandom GrVkResource::fRandom;
+GrVkResource::Trace GrVkResource::fTrace;
+uint32_t GrVkResource::fKeyCounter = 0;
 #endif
 
 GrVkResourceProvider::GrVkResourceProvider(GrVkGpu* gpu)
@@ -196,8 +196,9 @@ void GrVkResourceProvider::getUniformDescriptorSet(VkDescriptorSet* ds,
     fCurrentUniformDescCount += kNumUniformDescPerSet;
     if (fCurrentUniformDescCount > fCurrMaxUniDescriptors) {
         fUniformDescPool->unref(fGpu);
-        if (fCurrMaxUniDescriptors < kMaxUniformDescriptors >> 1) {
-            fCurrMaxUniDescriptors = fCurrMaxUniDescriptors << 1;
+        uint32_t newPoolSize = fCurrMaxUniDescriptors + ((fCurrMaxUniDescriptors + 1) >> 1);
+        if (newPoolSize < kMaxUniformDescriptors) {
+            fCurrMaxUniDescriptors = newPoolSize;
         } else {
             fCurrMaxUniDescriptors = kMaxUniformDescriptors;
         }
@@ -221,8 +222,16 @@ void GrVkResourceProvider::getUniformDescriptorSet(VkDescriptorSet* ds,
     *outPool = fUniformDescPool;
 }
 
-GrVkPrimaryCommandBuffer* GrVkResourceProvider::createPrimaryCommandBuffer() {
-    GrVkPrimaryCommandBuffer* cmdBuffer = GrVkPrimaryCommandBuffer::Create(fGpu, fGpu->cmdPool());
+GrVkPrimaryCommandBuffer* GrVkResourceProvider::findOrCreatePrimaryCommandBuffer() {
+    GrVkPrimaryCommandBuffer* cmdBuffer = nullptr;
+    int count = fAvailableCommandBuffers.count();
+    if (count > 0) {
+        cmdBuffer = fAvailableCommandBuffers[count -1];
+        SkASSERT(cmdBuffer->finished(fGpu));
+        fAvailableCommandBuffers.removeShuffle(count - 1);
+    } else {
+        cmdBuffer = GrVkPrimaryCommandBuffer::Create(fGpu, fGpu->cmdPool());
+    }
     fActiveCommandBuffers.push_back(cmdBuffer);
     cmdBuffer->ref();
     return cmdBuffer;
@@ -231,20 +240,54 @@ GrVkPrimaryCommandBuffer* GrVkResourceProvider::createPrimaryCommandBuffer() {
 void GrVkResourceProvider::checkCommandBuffers() {
     for (int i = fActiveCommandBuffers.count()-1; i >= 0; --i) {
         if (fActiveCommandBuffers[i]->finished(fGpu)) {
-            fActiveCommandBuffers[i]->unref(fGpu);
+            GrVkPrimaryCommandBuffer* cmdBuffer = fActiveCommandBuffers[i];
+            cmdBuffer->reset(fGpu);
+            fAvailableCommandBuffers.push_back(cmdBuffer);
             fActiveCommandBuffers.removeShuffle(i);
         }
     }
 }
 
+GrVkSecondaryCommandBuffer* GrVkResourceProvider::findOrCreateSecondaryCommandBuffer() {
+    GrVkSecondaryCommandBuffer* cmdBuffer = nullptr;
+    int count = fAvailableSecondaryCommandBuffers.count();
+    if (count > 0) {
+        cmdBuffer = fAvailableSecondaryCommandBuffers[count-1];
+        fAvailableSecondaryCommandBuffers.removeShuffle(count - 1);
+    } else {
+        cmdBuffer = GrVkSecondaryCommandBuffer::Create(fGpu, fGpu->cmdPool());
+    }
+    return cmdBuffer;
+}
+
+void GrVkResourceProvider::recycleSecondaryCommandBuffer(GrVkSecondaryCommandBuffer* cb) {
+    cb->reset(fGpu);
+    fAvailableSecondaryCommandBuffers.push_back(cb);
+}
+
 void GrVkResourceProvider::destroyResources() {
-    // release our current command buffers
+    // release our active command buffers
     for (int i = 0; i < fActiveCommandBuffers.count(); ++i) {
         SkASSERT(fActiveCommandBuffers[i]->finished(fGpu));
         SkASSERT(fActiveCommandBuffers[i]->unique());
+        fActiveCommandBuffers[i]->reset(fGpu);
         fActiveCommandBuffers[i]->unref(fGpu);
     }
     fActiveCommandBuffers.reset();
+    // release our available command buffers
+    for (int i = 0; i < fAvailableCommandBuffers.count(); ++i) {
+        SkASSERT(fAvailableCommandBuffers[i]->finished(fGpu));
+        SkASSERT(fAvailableCommandBuffers[i]->unique());
+        fAvailableCommandBuffers[i]->unref(fGpu);
+    }
+    fAvailableCommandBuffers.reset();
+
+    // release our available secondary command buffers
+    for (int i = 0; i < fAvailableSecondaryCommandBuffers.count(); ++i) {
+        SkASSERT(fAvailableSecondaryCommandBuffers[i]->unique());
+        fAvailableSecondaryCommandBuffers[i]->unref(fGpu);
+    }
+    fAvailableSecondaryCommandBuffers.reset();
 
     // loop over all render pass sets to make sure we destroy all the internal VkRenderPasses
     for (int i = 0; i < fRenderPassArray.count(); ++i) {
@@ -261,10 +304,6 @@ void GrVkResourceProvider::destroyResources() {
 
     fPipelineStateCache->release();
 
-#ifdef SK_TRACE_VK_RESOURCES
-    SkASSERT(0 == GrVkResource::fTrace.count());
-#endif
-
     GR_VK_CALL(fGpu->vkInterface(), DestroyPipelineCache(fGpu->device(), fPipelineCache, nullptr));
     fPipelineCache = VK_NULL_HANDLE;
 
@@ -278,12 +317,27 @@ void GrVkResourceProvider::destroyResources() {
 }
 
 void GrVkResourceProvider::abandonResources() {
-    // release our current command buffers
+    // release our active command buffers
     for (int i = 0; i < fActiveCommandBuffers.count(); ++i) {
         SkASSERT(fActiveCommandBuffers[i]->finished(fGpu));
+        SkASSERT(fActiveCommandBuffers[i]->unique());
         fActiveCommandBuffers[i]->unrefAndAbandon();
     }
     fActiveCommandBuffers.reset();
+    // release our available command buffers
+    for (int i = 0; i < fAvailableCommandBuffers.count(); ++i) {
+        SkASSERT(fAvailableCommandBuffers[i]->finished(fGpu));
+        SkASSERT(fAvailableCommandBuffers[i]->unique());
+        fAvailableCommandBuffers[i]->unrefAndAbandon();
+    }
+    fAvailableCommandBuffers.reset();
+
+    // release our available secondary command buffers
+    for (int i = 0; i < fAvailableSecondaryCommandBuffers.count(); ++i) {
+        SkASSERT(fAvailableSecondaryCommandBuffers[i]->unique());
+        fAvailableSecondaryCommandBuffers[i]->unrefAndAbandon();
+    }
+    fAvailableSecondaryCommandBuffers.reset();
 
     // loop over all render pass sets to make sure we destroy all the internal VkRenderPasses
     for (int i = 0; i < fRenderPassArray.count(); ++i) {
@@ -300,9 +354,6 @@ void GrVkResourceProvider::abandonResources() {
 
     fPipelineStateCache->abandon();
 
-#ifdef SK_TRACE_VK_RESOURCES
-    SkASSERT(0 == GrVkResource::fTrace.count());
-#endif
     fPipelineCache = VK_NULL_HANDLE;
 
     fUniformDescLayout = VK_NULL_HANDLE;

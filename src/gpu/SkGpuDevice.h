@@ -23,6 +23,8 @@ class GrAccelData;
 class GrTextureProducer;
 struct GrCachedLayer;
 
+class SkSpecialImage;
+
 /**
  *  Subclass of SkBaseDevice, which directs all drawing to the GrGpu owned by the
  *  canvas.
@@ -118,8 +120,8 @@ public:
                               const SkPaint&) override;
     void drawAtlas(const SkDraw&, const SkImage* atlas, const SkRSXform[], const SkRect[],
                        const SkColor[], int count, SkXfermode::Mode, const SkPaint&) override;
-    virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
-                            const SkPaint&) override;
+    void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y, const SkPaint&) override;
+
     void drawImage(const SkDraw&, const SkImage*, SkScalar x, SkScalar y, const SkPaint&) override;
     void drawImageRect(const SkDraw&, const SkImage*, const SkRect* src, const SkRect& dst,
                        const SkPaint&, SkCanvas::SrcRectConstraint) override;
@@ -128,6 +130,12 @@ public:
                        const SkRect& dst, const SkPaint& paint) override;
     void drawBitmapNine(const SkDraw& draw, const SkBitmap& bitmap, const SkIRect& center,
                         const SkRect& dst, const SkPaint& paint) override;
+
+    void drawSpecial(const SkDraw&, SkSpecialImage*,
+                     int left, int top, const SkPaint& paint) override;
+    sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
+    sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
+    sk_sp<SkSpecialImage> snapSpecial() override;
 
     void flush() override;
 
@@ -144,10 +152,6 @@ protected:
     bool onReadPixels(const SkImageInfo&, void*, size_t, int, int) override;
     bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) override;
     bool onShouldDisableLCD(const SkPaint&) const final;
-
-    /**  PRIVATE / EXPERIMENTAL -- do not call */
-    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture,
-                                          const SkMatrix*, const SkPaint*) override;
 
 private:
     // We want these unreffed in DrawContext, RenderTarget, GrContext order.
@@ -217,6 +221,12 @@ private:
                             SkCanvas::SrcRectConstraint,
                             bool bicubic,
                             bool needsTextureDomain);
+
+    sk_sp<SkSpecialImage> filterTexture(const SkDraw&,
+                                        SkSpecialImage*,
+                                        int left, int top,
+                                        SkIPoint* offset,
+                                        const SkImageFilter* filter);
 
     void drawTiledBitmap(const SkBitmap& bitmap,
                          const SkMatrix& viewMatrix,
