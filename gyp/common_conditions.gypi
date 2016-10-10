@@ -137,7 +137,7 @@
                #'FloatingPointModel': '2',          # fast (/fp:fast)
                 'FavorSizeOrSpeed': '1',            # speed (/Ot)
                 'PreprocessorDefinitions': ['NDEBUG'],
-                'RuntimeLibrary': '2',              # rtMultiThreadedDLL (/MD)
+                'RuntimeLibrary': '0',              # rtMultiThreaded (/MT)
                 'EnableEnhancedInstructionSet': '2',# /arch:SSE2
                 'RuntimeTypeInfo': 'false',         # /GR-
               },
